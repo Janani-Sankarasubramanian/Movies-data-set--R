@@ -1,0 +1,1231 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Movies Project
+set the current working directory
+```{r}
+setwd("C:/Users/nithi/Downloads/Movies-Project")
+```
+Import the required libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(tidyr)
+library(rjson)
+library(jsonlite)
+library(purrr)
+library(gdata)
+library(stringr)
+library(tidyverse)
+library(magrittr)
+library(shiny)
+library(dummies)
+library(data.table)
+library(lubridate)
+
+
+```
+
+Loading the movies and credits data
+```{r}
+movies <- read.csv(file = "data/movies_metadata.csv", stringsAsFactors = FALSE)
+credits <- read.csv(file = "data/credits.csv", stringsAsFactors = FALSE)
+```
+
+Loading the keywords and ratings data
+```{r}
+keywords <- read.csv(file = "data/keywords.csv", stringsAsFactors = FALSE)
+ratings <- read.csv(file = "data/ratings.csv", stringsAsFactors = FALSE)
+```
+
+
+
+Looking at the movies data
+```{r}
+t(head(movies,1))
+```
+Summary of movies data
+```{r}
+summary(movies)
+```
+
+
+Looking at the credits data
+```{r}
+head(credits)
+```
+
+Summary of credits data
+```{r}
+summary(credits)
+```
+
+
+Looking at the keywords data
+```{r}
+t(head(keywords,1))
+```
+Summary of movies data
+```{r}
+summary(keywords)
+```
+
+Looking at the ratings data
+```{r}
+t(head(ratings,1))
+```
+Summary of movies data
+```{r}
+summary(ratings)
+```
+
+
+
+Looking for na values in each column of movies data
+```{r}
+lapply(movies,function(x){length(which(is.na(x)))})
+```
+Looking for na values in each column of movies data
+```{r}
+lapply(credits,function(x){length(which(is.na(x)))})
+```
+
+Looking for na values in each column of keywords data
+```{r}
+lapply(keywords,function(x){length(which(is.na(x)))})
+```
+
+Looking for na values in each column of ratings data
+```{r}
+lapply(ratings,function(x){length(which(is.na(x)))})
+```
+
+Checking the dimension of movies
+```{r}
+dim(movies)
+```
+
+Checking the dimension of credits
+```{r}
+dim(credits)
+```
+
+Checking the dimension of keywords
+```{r}
+dim(keywords)
+```
+
+Checking the dimension of ratings
+```{r}
+dim(ratings)
+```
+
+
+
+Since, we have considerably less na values, removing na's from the movies data.
+```{r}
+movies <- na.omit(movies)
+```
+checking whether the na values are removed
+```{r}
+lapply(movies,function(x){length(which(is.na(x)))})
+```
+
+```{r}
+movies$year <-format(as.Date(movies$release_date, format="%m/%d/%Y"),"%Y")
+```
+
+
+```{r}
+movies = movies[!duplicated(movies$id),]
+```
+
+```{r}
+dim(movies)
+```
+
+
+Scaling the movies budget to millions and converting the type of the budget.
+```{r}
+movies$budget <- as.numeric(movies$budget)
+dim(is.null(movies$budget))
+movies$budget <-round(as.numeric(movies$budget)/1000000, 2)
+```
+
+Scaling the movies revenue to millions and converting the type of the revenue.
+```{r}
+movies$revenue <- as.numeric(movies$revenue)
+dim(is.null(movies$revenue))
+movies$revenue <-round(as.numeric(movies$revenue)/1000000, 2)
+```
+
+```{r}
+dim(movies)
+```
+
+
+```{r}
+credits <- subset(credits, credits$cast != "[]")
+```
+
+Parsing the cast data
+```{r}
+cast_text <- sub("\\%\\$\\%", "", gsub("\'|\"|\\[|\\]|\\{|\\}|,", "", gsub("\'cast_id\':|\'character\':|\'credit_id\':|\'gender\':|\'id\':|\'name\':|\'order\':|\'profile_path\':", "%$%", credits$cast)))
+  
+s<- strsplit(cast_text, "\\%\\$\\%")
+
+
+
+cast_data<- data.frame(movies_id = rep(credits$id, sapply(s, length)/8), matrix(trimws(unlist(s)), ncol=8, byrow = TRUE), stringsAsFactors = FALSE)
+
+#cast_data <- data.frame(matrix(trimws(cbind(credits$id, unlist(strsplit(cast_text, "\\%\\$\\%"),ncol = 8, byrow = TRUE)))), stringsAsFactors = FALSE)
+  
+names(cast_data) <- c("movies_id","cast_id", "character_name", "credit_id", "gender", "id", "name", "order", "profile_path")
+
+#cast_data$order <- as.numeric(cast_data$order)
+
+#cast_data <- cast_data[cast_data$order ==0,]
+
+#cast_data$order <- as.numeric(cast_data$order)
+#cast_data$gender <- as.numeric(cast_data$gender)
+#cast_data$name <- as.character(cast_data$name)
+#cast_data <- cast_data[c('name','order','gender')]
+#cast_data <- subset(cast_data, cast_data$order == c(0,1))
+```
+
+```{r}
+dim(cast_data)
+```
+
+
+```{r}
+head(cast_data)
+```
+
+
+Removing special characters from the cast data
+```{r}
+cast_data <- as.data.frame(gsub("[[:punct:]]", "", as.matrix(cast_data))) 
+```
+
+Popular actors who acted on highest number of movies
+```{r}
+cast_data %>% count(name,id, sort = TRUE)
+```
+
+```{r}
+cast_data %>% select(movies_id, name, character_name, order)
+```
+
+```{r}
+movies_actors_data <- cast_data %>%
+    left_join(movies %>% select(id, title, release_date, budget),
+              by=c("movies_id" = "id"))  %>%
+    group_by(id) %>%
+    summarise(num_movies=n(),
+              name=name[1],
+              debut_character=character_name[1],
+              debut_date=min(release_date),
+              debut_movie=title[1],
+              release_date = release_date[1],
+              budget = budget[1]) %>%
+    filter(budget > 0)
+
+```
+
+```{r}
+movies_actors_data <- na.omit(movies_actors_data)
+```
+
+```{r}
+dim(movies_actors_data)
+```
+
+```{r}
+head(movies_actors_data)
+```
+
+```{r}
+movies_actors_data$release_date <- as.Date(movies_actors_data$release_date, format="%m/%d/%Y")
+movies_actors_data$debut_date <- as.Date(movies_actors_data$debut_date, format="%m/%d/%Y")
+```
+
+
+```{r}
+
+movies_actors_data$year_delta <-
+    as.numeric(movies_actors_data$release_date - 
+                 movies_actors_data$debut_date)/365
+```
+
+
+```{r}
+head(movies_actors_data)
+```
+
+```{r}
+movies_actors_data = subset(movies_actors_data, movies_actors_data$year_delta != 0.000)
+```
+
+```{r}
+dim(movies_actors_data)
+```
+
+```{r}
+movies_actors_data$id <- as.numeric(movies_actors_data$id)
+movies_actors_data$name <- as.character(movies_actors_data$name)
+movies_actors_data$debut_character <- as.character(movies_actors_data$debut_character)
+```
+
+```{r}
+movies_actors_data$release_date <-format(as.Date(movies_actors_data$release_date, format="%m/%d/%Y"),"%Y")
+```
+
+```{r}
+movies_actors_data$release_date <- as.numeric(movies_actors_data$release_date)
+```
+
+
+```{r}
+plot_by_actor <-  movies_actors_data %>%
+    filter(num_movies > 3) %>%
+    ggplot(aes(x=release_date, 
+               y=budget, 
+               group=id, colour=name,
+               tt1=name, tt2=budget)) +
+    geom_point(alpha=0.2) + 
+    ylab("Budget of movie in million$") +
+    xlab("Release Date") 
+  
+```
+
+
+```{r}
+ggplotly(plot_by_actor, tooltip =c("tt1", "tt2"))
+```
+
+
+Taking only the main actors into account from the cast data
+```{r}
+cast_data$order = as.factor(cast_data$order)
+cast_data = cast_data[cast_data$order == 0,]
+```
+
+```{r}
+head(cast_data)
+```
+
+
+```{r}
+dim(cast_data)
+```
+
+Delete some columns that we dont need from cast data
+```{r}
+col_deleted_cast = c("cast_id", "character_name","id","profile_path", 'order', "credit_id", "gender" )
+cast_data = cast_data[,!(names(cast_data) %in% col_deleted_cast)]
+```
+
+```{r}
+dim(cast_data)
+```
+
+```{r}
+head(cast_data)
+```
+
+
+
+Parsing the crew data
+```{r}
+
+crew_text <- sub("\\%\\$\\%", "", gsub("\'|\"|\\[|\\]|\\{|\\}|,", "", gsub("\'credit_id\':|\'department\':|\'gender\':|\'id\':|\'job\':|\'name\':|\'profile_path\':", "%$%", credits$crew)))
+
+s<- strsplit(crew_text, "\\%\\$\\%")
+
+crew_data<- data.frame(movies_id = rep(credits$id, sapply(s, length)/7), matrix(trimws(unlist(s)), ncol=7, byrow = TRUE), stringsAsFactors = FALSE)
+
+
+#crew_data <- data.frame(matrix(trimws(unlist(strsplit(cast_text, "\\%\\$\\%"))), 
+ #   ncol = 8, byrow = TRUE), stringsAsFactors = FALSE)
+
+names(crew_data) <- c("movies_id","credit_id", "department", "gender", "id", "job", "name", "profile_path")
+
+
+```
+
+```{r}
+dim(crew_data)
+```
+
+```{r}
+head(crew_data)
+```
+Removing special characters from the crew data
+```{r}
+crew_data <- as.data.frame(gsub("[[:punct:]]", "", as.matrix(crew_data)))
+```
+
+popular crew members who worked on highest number of movies
+```{r}
+crew_data %>% count(name,id,sort=TRUE)
+```
+
+Taking only the directors into account from the crew data
+```{r}
+crew_data$job = as.factor(crew_data$job)
+crew_data = crew_data[crew_data$job == "Director",]
+```
+
+```{r}
+dim(crew_data)
+```
+
+
+
+Delete some columns that we dont need from crew data
+```{r}
+col_deleted_crew = c("credit_id", "department","gender","id", "job", "profile_path" )
+crew_data = crew_data[,!(names(crew_data) %in% col_deleted_crew)]
+```
+
+```{r}
+dim(crew_data)
+```
+
+```{r}
+head(crew_data)
+```
+
+Aggregating different directors based on the movies
+```{r}
+crew_data$name <- as.character(crew_data$name)
+crew_data = aggregate(.~crew_data$movies_id,crew_data , paste, collapse=",")
+```
+
+```{r}
+head(crew_data)
+```
+
+```{r}
+col_deleted_crew = c("movies_id" )
+crew_data = crew_data[,!(names(crew_data) %in% col_deleted_crew)]
+```
+
+```{r}
+names(crew_data) <- c("movies_id","name")
+```
+
+```{r}
+head(crew_data)
+```
+
+```{r}
+dim(crew_data)
+```
+
+Having a look at keywords from keywords data
+```{r}
+head(keywords$keywords)
+```
+
+Splitting keywords data into separate columns
+```{r}
+
+keywords_text <- sub("\\%\\$\\%", "", gsub("\'|\"|\\[|\\]|\\{|\\}|,", "", gsub("\'id\':|\'name\':", "%$%", keywords$keywords)))
+
+s<- strsplit(keywords_text, "\\%\\$\\%")
+
+keywords_data<- data.frame(keywords_id = rep(keywords$id, sapply(s, length)/2), matrix(trimws(unlist(s)), ncol=2, byrow = TRUE), stringsAsFactors = FALSE)
+
+
+#crew_data <- data.frame(matrix(trimws(unlist(strsplit(cast_text, "\\%\\$\\%"))), 
+ #   ncol = 8, byrow = TRUE), stringsAsFactors = FALSE)
+
+names(keywords_data) <- c("movies_id","id", "name")
+
+
+```
+
+```{r}
+dim(keywords_data)
+```
+
+```{r}
+head(keywords_data)
+```
+
+```{r}
+keywords_data %>% count(name,sort=TRUE)
+
+```
+
+```{r}
+keywords.count = as.data.frame(table(keywords_data$name))
+keywords.count[with(keywords.count, order(-Freq)),]
+keywords.count = keywords.count[keywords.count$Freq > 500,]
+keywords.count.names = as.character(keywords.count$Var1)
+keywords.pattern = paste(keywords.count.names, collapse = '|')
+
+```
+
+```{r}
+head(keywords.pattern)
+```
+
+
+```{r}
+keywords_data_co = keywords_data %>% group_by(movies_id) %>% summarize(type = c("woman director","independent film","murder","based on novel","musical"), collapse = ',')
+
+```
+
+```{r}
+keywords_data_co$new = lapply(keywords_data_co$type, FUN = function(x) { as.list(strsplit(x,", ")[[1]])})
+```
+
+
+```{r}
+head(keywords_data_co)
+```
+
+```{r}
+keywords_data_co = keywords_data_co[grep(keywords.pattern, keywords_data_co$new),]
+
+```
+
+
+```{r}
+for(i in 1:nrow(keywords_data_co))
+  {
+  keywords_data_co[i,unlist(keywords_data_co[i, 'new'], use.names = F)] = 1
+  }
+```
+
+One hot encoded data
+```{r}
+head(keywords_data_co)
+```
+
+```{r}
+col_deleted_keywords =  c("type","new","collapse")
+
+keywords_data_co = keywords_data_co[, !(names(keywords_data_co) %in% col_deleted_keywords)]
+```
+
+```{r}
+keywords_data_co[is.na(keywords_data_co)] = 0
+```
+
+```{r}
+head(keywords_data_co)
+```
+
+Having a look at movie genres from movies data
+```{r}
+head(movies$genres)
+```
+
+Splitting genre data into separate columns
+```{r}
+
+genres_text <- sub("\\%\\$\\%", "", gsub("\'|\"|\\[|\\]|\\{|\\}|,", "", gsub("\'id\':|\'name\':", "%$%", movies$genres)))
+
+s<- strsplit(genres_text, "\\%\\$\\%")
+
+genres_data<- data.frame(movies_id = rep(movies$id, sapply(s, length)/2), matrix(trimws(unlist(s)), ncol=2, byrow = TRUE), stringsAsFactors = FALSE)
+
+
+#crew_data <- data.frame(matrix(trimws(unlist(strsplit(cast_text, "\\%\\$\\%"))), 
+ #   ncol = 8, byrow = TRUE), stringsAsFactors = FALSE)
+
+names(genres_data) <- c("movies_id","id", "name")
+
+
+```
+
+```{r}
+dim(genres_data)
+```
+
+```{r}
+head(genres_data)
+```
+
+We have 20 unique factors on genre data
+```{r}
+genres_plot <- genres_data %>% count(name,sort=TRUE)
+```
+
+```{r}
+hist(genres_plot$name)
+```
+
+
+```{r}
+genres.count = as.data.frame(table(genres_data$name))
+genres.count[with(genres.count, order(-Freq)),]
+genres.count = genres.count[genres.count$Freq > 1000,]
+genre.count.names = as.character(genres.count$Var1)
+count.pattern = paste(genre.count.names, collapse = '|')
+
+```
+
+
+```{r}
+col_deleted_genres =  c("id")
+
+genres_data = genres_data[, !(names(genres_data) %in% col_deleted_genres)]
+```
+
+```{r}
+head(genres_data)
+```
+
+
+```{r}
+genres_data_co = genres_data %>% group_by(movies_id) %>% summarize(type = paste(sort(unique(name)), collapse = ', '))
+
+```
+
+```{r}
+genres_data_co$new = lapply(genres_data_co$type, FUN = function(x) { as.list(strsplit(x,", ")[[1]])})
+```
+
+
+```{r}
+head(genres_data_co)
+```
+
+```{r}
+genres_data_co = genres_data_co[grep(count.pattern, genres_data_co$new),]
+
+```
+
+
+```{r}
+for(i in 1:nrow(genres_data_co)){
+  genres_data_co[i,unlist(genres_data_co[i, 'new'], use.names = F)] = 1
+}
+
+```
+
+One hot encoded data
+```{r}
+head(genres_data_co)
+```
+
+```{r}
+col_deleted_genres =  c("type","new")
+
+genres_data_co = genres_data_co[, !(names(genres_data_co) %in% col_deleted_genres)]
+```
+
+```{r}
+genres_data_co[is.na(genres_data_co)] = 0
+```
+
+```{r}
+head(genres_data_co)
+```
+
+
+Having a look at movie production companies from movies data
+```{r}
+head(movies$production_companies)
+```
+
+splitting production companies data into separate columns
+```{r}
+production_companies_text <-  sub("\\%\\$\\%", "", gsub("\'|\"|\\[|\\]|\\{|\\}|,", "", gsub("\'name\':|\'id\':", "%$%", movies$production_companies)))
+
+s<- strsplit(production_companies_text, "\\%\\$\\%")
+
+production_companies_data<- data.frame(movies_id = rep(movies$id, sapply(s, length)/2), matrix(trimws(unlist(s)), ncol=2, byrow = TRUE), stringsAsFactors = FALSE)
+
+names(production_companies_data) <- c("movies_id","name", "id")
+
+```
+
+```{r}
+dim(production_companies_data)
+```
+
+```{r}
+head(production_companies_data)
+```
+
+Aggregating different production companies of movies
+```{r}
+production_companies_data = aggregate(.~production_companies_data$movies_id,production_companies_data , paste, collapse=",")
+```
+
+```{r}
+head(production_companies_data)
+```
+
+```{r}
+col_deleted_pc = c("movies_id","id" )
+production_companies_data = production_companies_data[,!(names(production_companies_data) %in% col_deleted_pc)]
+```
+
+```{r}
+names(production_companies_data) <- c("movies_id","name")
+```
+
+```{r}
+head(production_companies_data)
+```
+
+```{r}
+dim(production_companies_data)
+```
+
+
+Having a look at movie production countries from movies data
+```{r}
+head(movies$production_countries)
+```
+
+splitting production countries data into separate columns
+```{r}
+production_countries_text <-  sub("\\%\\$\\%", "", gsub("\'|\"|\\[|\\]|\\{|\\}|,", "", gsub("\'iso_3166_1\':|\'name\':", "%$%", movies$production_countries)))
+
+s<- strsplit(production_countries_text, "\\%\\$\\%")
+
+production_countries_data<- data.frame(movies_id = rep(movies$id, sapply(s, length)/2), matrix(trimws(unlist(s)), ncol=2, byrow = TRUE), stringsAsFactors = FALSE)
+
+names(production_countries_data) <- c("movies_id","id", "name")
+
+```
+
+```{r}
+dim(production_countries_data)
+```
+
+```{r}
+head(production_countries_data)
+```
+
+Aggregating different production countries of movies
+```{r}
+production_countries_data = aggregate(.~production_countries_data$movies_id,production_countries_data , paste, collapse=",")
+```
+
+```{r}
+head(production_countries_data)
+```
+
+```{r}
+col_deleted_pct = c("movies_id","name" )
+production_countries_data = production_countries_data[,!(names(production_countries_data) %in% col_deleted_pct)]
+```
+
+```{r}
+names(production_countries_data) <- c("movies_id","name")
+```
+
+```{r}
+head(production_countries_data)
+```
+
+```{r}
+dim(production_countries_data)
+```
+
+
+Having a look at spoken languages of movies data
+```{r}
+head(movies$spoken_languages)
+```
+
+
+splitting languages data into seperate columns
+```{r}
+spoken_languages_text <-  sub("\\%\\$\\%", "", gsub("\'|\"|\\[|\\]|\\{|\\}|,", "", gsub("\'iso_639_1\':|\'name\':", "%$%", movies$spoken_languages)))
+
+s<- strsplit(spoken_languages_text, "\\%\\$\\%")
+
+spoken_languages_data <- data.frame(movies_id = rep(movies$id, sapply(s, length)/2), matrix(trimws(unlist(s)), ncol=2, byrow = TRUE), stringsAsFactors = FALSE)
+
+names(spoken_languages_data) <- c("movies_id","id", "name")
+```
+
+```{r}
+dim(spoken_languages_data)
+```
+
+```{r}
+head(spoken_languages_data)
+```
+
+
+Aggregating different production countries of movies
+```{r}
+spoken_languages_data = aggregate(.~spoken_languages_data$movies_id,spoken_languages_data , paste, collapse=",")
+```
+
+```{r}
+head(spoken_languages_data)
+```
+
+```{r}
+col_deleted_sl = c("movies_id","name" )
+spoken_languages_data = spoken_languages_data[,!(names(spoken_languages_data) %in% col_deleted_sl)]
+```
+
+```{r}
+names(spoken_languages_data) <- c("movies_id","name")
+```
+
+```{r}
+head(spoken_languages_data)
+```
+
+```{r}
+dim(spoken_languages_data)
+```
+
+delete columns time stamp and user id from ratings data
+```{r}
+col_deleted_sl = c('userId', 'timestamp')
+ratings = ratings[, !(names(ratings) %in% col_deleted_sl)]
+```
+
+
+Extracting mean values based on movie id's from ratings data
+```{r}
+ratings = aggregate(. ~ movieId, ratings, mean)
+```
+
+```{r}
+head(ratings)
+```
+
+```{r}
+dim(ratings)
+```
+
+
+```{r}
+dim(movies)
+```
+
+
+```{r}
+movies$belongs_to_collection = movies$belongs_to_collection != ''
+movies[movies$belongs_to_collection, 'belongs_to_collection'] = 1
+```
+
+```{r}
+movies$release_month <- month(as.IDate(movies$release_date, '%m/%d/%Y'))
+```
+
+
+Delete some columns that we dont need from movies
+```{r}
+col_deleted_movies =  c('homepage',"original_title","overview","poster_path","status","tagline","video", "genres", "production_companies", "production_countries","spoken_languages","adult","imdb_id","original_language")
+
+movies = movies[, !(names(movies) %in% col_deleted_movies)]
+
+```
+
+view movies data
+```{r}
+head(movies)
+```
+
+```{r}
+dim(movies)
+```
+
+
+Merging cast data to movies
+```{r}
+movies = merge(movies, cast_data, by.x = 'id', by.y = 'movies_id', all.x = TRUE)
+```
+
+```{r}
+dim(movies)
+```
+
+```{r}
+head(movies)
+```
+
+```{r}
+names(movies) <- c("id","belongs_to_collection","budget","popularity","release_data","revenue","runtime","title","vote_average","vote_count","year","release_month","lead_actor")
+```
+
+
+Merging crew data to movies
+```{r}
+movies = merge(movies, crew_data, by.x = 'id', by.y = 'movies_id', all.x = TRUE)
+```
+
+```{r}
+dim(movies)
+```
+
+Renaming the movies data
+```{r}
+names(movies) <- c("id","belongs_to_collection","budget","popularity","release_data","revenue","runtime","title","vote_average","vote_count","year","release_month","lead_actor","director")
+```
+
+
+```{r}
+head(movies)
+```
+
+Merging keywords_data data to movies
+```{r}
+movies = merge(movies, keywords_data, by.x = 'id', by.y = 'movies_id', all.x = TRUE)
+```
+
+```{r}
+dim(movies)
+```
+
+```{r}
+head(movies)
+```
+
+
+Renaming the movies data
+```{r}
+names(movies) <- c("id","belongs_to_collection","budget","popularity","release_date","revenue","runtime","title","vote_average","vote_count","year","release_month","lead_actor","director","keywords")
+```
+
+
+
+Merging ratings data to movies
+```{r}
+ratings$movieId <- as.character(ratings$movieId)
+```
+
+```{r}
+movies = merge(movies, ratings, by.x = 'id', by.y = 'movieId', all.x = TRUE)
+```
+
+```{r}
+dim(movies)
+```
+
+```{r}
+head(movies)
+```
+
+Renaming the movies data
+```{r}
+names(movies) <- c("id","belongs_to_collection","budget","popularity","release_date","revenue","runtime","title","vote_average","vote_count","year","release_month","lead_actor","director","keywords","rating")
+```
+
+Merging genres_data to movies
+```{r}
+movies = merge(movies, genres_data, by.x = 'id', by.y = 'movies_id', all.x = TRUE)
+```
+
+```{r}
+dim(movies)
+```
+
+```{r}
+head(movies)
+```
+
+Renaming the movies data
+```{r}
+names(movies) <- c("id","belongs_to_collection","budget","popularity","release_date","revenue","runtime","title","vote_average","vote_count","year","release_month","lead_actor","director","keywords","rating","genres")
+```
+
+Merging production_companies data to movies
+```{r}
+movies = merge(movies, production_companies_data, by.x = 'id', by.y = 'movies_id', all.x = TRUE)
+```
+
+```{r}
+dim(movies)
+```
+
+```{r}
+head(movies)
+```
+
+Renaming the movies data
+```{r}
+names(movies) <- c("id","belongs_to_collection","budget","popularity","release_date","revenue","runtime","title","vote_average","vote_count","year","release_month","lead_actor","director","keywords","rating","genres","production_company")
+```
+
+Merging production_countries_data data to movies
+```{r}
+movies = merge(movies, production_countries_data, by.x = 'id', by.y = 'movies_id', all.x = TRUE)
+```
+
+```{r}
+dim(movies)
+```
+
+```{r}
+head(movies)
+```
+
+Renaming the movies data
+```{r}
+names(movies) <- c("id","belongs_to_collection","budget","popularity","release_date","revenue","runtime","title","vote_average","vote_count","year","release_month","lead_actor","director","keywords","rating","genres","production_company","production_country")
+```
+
+Merging spoken_languages_data data to movies
+```{r}
+movies = merge(movies, spoken_languages_data, by.x = 'id', by.y = 'movies_id', all.x = TRUE)
+```
+
+```{r}
+dim(movies)
+```
+
+```{r}
+head(movies)
+```
+
+Renaming the movies data
+```{r}
+names(movies) <- c("id","belongs_to_collection","budget","popularity","release_date","revenue","runtime","title","vote_average","vote_count","year","release_month","lead_actor","director","keywords","rating","genres","production_company","production_country","spoken_language")
+```
+
+```{r}
+head(movies)
+```
+
+```{r}
+dim(movies)
+```
+
+```{r}
+movies$lead_actor <- as.character(movies$lead_actor)
+movies$lead_actor <- ifelse(is.na(movies$lead_actor), 'Unknown', movies$lead_actor)
+```
+
+```{r}
+movies$director <- ifelse(is.na(movies$director), 'Unknown', movies$director)
+```
+
+```{r}
+movies$keywords <- ifelse(is.na(movies$keywords), 'Unknown', movies$keywords)
+```
+
+```{r}
+movies$production_company <- ifelse(is.na(movies$production_company), 'Unknown', movies$production_company)
+```
+
+```{r}
+movies$production_country <- ifelse(is.na(movies$production_country), 'Unknown', movies$production_country)
+```
+
+```{r}
+movies$spoken_language <- ifelse(is.na(movies$spoken_language), 'Unknown', movies$spoken_language)
+```
+
+```{r}
+movies$release_date <- as.Date(movies$release_date, format="%m/%d/%Y")
+```
+
+```{r}
+movies <- na.omit(movies)
+```
+
+```{r}
+head(movies)
+```
+
+```{r}
+dim(movies)
+```
+
+
+Delete budget and revenue from movies
+```{r}
+col_deleted_movies =  c("budget","revenue")
+
+movies = movies[, !(names(movies) %in% col_deleted_movies)]
+
+```
+
+```{r}
+head(movies)
+```
+
+```{r}
+dim(movies)
+```
+
+Merging the one hot encoded data of movies and Genres
+
+```{r}
+head(genres_data_co)
+```
+
+```{r}
+head(keywords_data_co)
+```
+
+
+
+```{r}
+movies_and_genres = merge(movies, genres_data_co, by.x = 'id', by.y = 'movies_id', all.x = TRUE)
+```
+
+```{r}
+head(movies_and_genres)
+```
+
+
+```{r}
+dim(movies_and_genres)
+```
+
+```{r}
+movies_and_genres[is.na(movies_and_genres)] = 0
+```
+
+
+Merging the one hot encoded data of movies and Keywords
+```{r}
+final_movies = merge(movies_and_genres, keywords_data_co, by.x = 'id', by.y = 'movies_id', all.x = TRUE)
+
+```
+
+
+```{r}
+final_movies[is.na(final_movies)] = 0
+
+```
+
+
+```{r}
+head(final_movies)
+```
+
+
+Delete budget and revenue from movies
+```{r}
+col_deleted_movies =  c("keywords","rating")
+
+final_movies = final_movies[, !(names(final_movies) %in% col_deleted_movies)]
+
+```
+
+
+
+```{r}
+dim(final_movies)
+```
+
+
+```{r}
+names(final_movies) <- c("id","belongs_to_collection","popularity","release_date","runtime","title","vote_average","vote_count","year","release_month","lead_actor","director","rating","genres","production_company","production_country","spoken_language", "Comedy", "Crime", "Drama", "Science_Fiction","War","Romance","Horror","Thriller", "Action","Adventure","Fantasy", "Mystery", "Animation", "Family","Foreign","Documentary","Music","History","Western","TV_Movie","woman_director","independent_film","murder","based_on_novel","musical")
+
+```
+
+
+```{r}
+head(final_movies)
+```
+
+```{r}
+final_movies$production_company <- substr(final_movies$production_company,1,8)
+```
+
+```{r}
+final_movies$director <- substr(final_movies$director,1,15)
+```
+
+```{r}
+head(final_movies)
+```
+
+Stratified Random split on data
+```{r}
+library(caret)
+```
+
+```{r}
+Only_for_fun <- final_movies
+Only_for_fun$runtime[which(is.na(Only_for_fun$runtime))] <- mean(Only_for_fun$runtime,na.rm = TRUE)
+Only_for_fun.null.count = lapply(Only_for_fun, function(x) { length(which(is.na(x))) })
+```
+
+```{r}
+head(Only_for_fun)
+```
+
+```{r}
+## 75% of the sample size
+part <- floor(0.80 * nrow(Only_for_fun))
+
+## set the seed to make your partition reproducible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(Only_for_fun)), size = part)
+
+Sample <- Only_for_fun[train_ind, ]
+Vault <- Only_for_fun[-train_ind, ]
+
+Sample$rating_class <- cut(Sample$rating, breaks=c(0,3,4,5), labels=c("L","A","U"))
+
+```
+
+
+```{r}
+drop2 = c("rating","id","title","genres", "runtime")
+Sample = Sample[, !(names(Sample) %in% drop2)]
+
+```
+
+```{r}
+part2 <- floor(0.80 * nrow(Sample))
+train_ind <- sample(seq_len(nrow(Sample)), size = part2)
+Train <- Sample[train_ind, ]
+Test <- Sample[-train_ind, ]
+
+X <- Train[, !(names(Sample) %in% "rating_class")]
+y <- Train$rating_class
+
+Train.null.count = lapply(Train, function(x) { length(which(is.na(x))) })
+
+```
+
+repeated k-fold cross validation
+```{r}
+control <- trainControl(method='repeatedcv', 
+                        number=10, 
+                        repeats=3)
+#Metric compare model is Accuracy
+metric <- "Accuracy"
+set.seed(123)
+#Number randomly variable selected is mtry
+mtry <- sqrt(ncol(X))
+tunegrid <- expand.grid(.mtry=mtry)
+
+rf_default <- train(rating_class~., 
+                    data=Train, 
+                    method='rf', 
+                    metric='Accuracy', 
+                    tuneGrid=tunegrid, 
+                    trControl=control)
+
+```
+
+```{r}
+
+memory.limit(size=5000000) 
+```
+
+```{r}
+rf_default
+```
+
+```{r}
+
+```
+
